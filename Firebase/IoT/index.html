@@ -43,6 +43,7 @@
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
       gap: 15px;
       padding: 15px;
+      transition: all 0.3s ease;
     }
     .image-card {
       background: white;
@@ -130,7 +131,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-app.js";
-    import { getDatabase, ref, query, orderByChild, limitToLast, get } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-database.js";
+    import { getDatabase, ref, query, orderByChild, limitToLast, onValue, get } from "https://www.gstatic.com/firebasejs/9.1.3/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBVehNQLfO4xbD1wT2Ro_lyle6r9X3mrJ0",
@@ -153,11 +154,11 @@
       const gallery = document.getElementById('image-gallery');
       const totalSlots = 10;
 
-      const displayData = Array.from({ length: totalSlots }, (_, index) => 
-        images[index] || { 
-          image: DEFAULT_IMAGE, 
-          text: 'Đang cập nhật', 
-          timestamp: Date.now() 
+      const displayData = Array.from({ length: totalSlots }, (_, index) =>
+        images[index] || {
+          image: DEFAULT_IMAGE,
+          text: 'Đang cập nhật',
+          timestamp: Date.now()
         }
       );
 
@@ -175,26 +176,21 @@
       `).join('');
     };
 
-    const loadLatestImages = async () => {
-      try {
-        document.getElementById('loading').style.display = 'block';
-        const snapshot = await get(query(ref(db, 'images'), orderByChild('timestamp'), limitToLast(10)));
-
+    // Real-time update: ảnh mới nhất bên trái
+    const setupRealtimeListener = () => {
+      const q = query(ref(db, 'images'), orderByChild('timestamp'), limitToLast(10));
+      onValue(q, (snapshot) => {
         const images = [];
         snapshot.forEach(child => {
           const val = child.val();
-          if (val?.image) images.push(val);
+          if (val?.image) images.unshift(val); // mới nhất lên đầu
         });
-
-        displayImages(images.reverse());
-      } catch (error) {
-        console.error('Lỗi tải ảnh:', error);
-        displayImages([]);
-      } finally {
+        displayImages(images);
         document.getElementById('loading').style.display = 'none';
-      }
+      });
     };
 
+    // Tìm kiếm (không real-time)
     const searchByDescription = async (keyword) => {
       try {
         document.getElementById('loading').style.display = 'block';
@@ -202,7 +198,7 @@
         const results = [];
         snapshot.forEach(child => {
           const val = child.val();
-          if (val?.text?.toLowerCase().includes(keyword.toLowerCase())) results.push(val);
+          if (val?.text?.toLowerCase().includes(keyword.toLowerCase())) results.unshift(val);
         });
         displayImages(results);
       } catch (error) {
@@ -218,10 +214,15 @@
       clearTimeout(searchTimer);
       const keyword = e.target.value.trim();
       searchTimer = setTimeout(() => {
-        keyword ? searchByDescription(keyword) : loadLatestImages();
+        if (keyword) {
+          searchByDescription(keyword);
+        } else {
+          setupRealtimeListener(); // Khi xóa tìm kiếm, trở lại real-time
+        }
       }, 500);
     });
 
+    // Modal bảng ASL
     const aslModal = document.getElementById('aslModal');
     const aslImage = document.getElementById('aslImage');
     const closeModal = document.getElementById('closeModal');
@@ -242,7 +243,9 @@
       }
     };
 
-    loadLatestImages();
+    // Khởi động: bật real-time
+    document.getElementById('loading').style.display = 'block';
+    setupRealtimeListener();
   </script>
 </body>
 </html>
