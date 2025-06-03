@@ -1,4 +1,3 @@
-# pi_capture_client.py
 import cv2
 import requests
 import time
